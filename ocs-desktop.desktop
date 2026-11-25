@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OCS Desktop
+Comment=Manage browser profiles, extensions and userscripts
+Comment[zh_CN]=管理浏览器配置、扩展和用户脚本
+Exec=ocs-desktop
+Icon=ocs-desktop
+Terminal=false
+Categories=Utility;
+StartupWMClass=ocs-desktop

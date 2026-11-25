@@ -1,0 +1,55 @@
+--- a/out/main/index.js
++++ b/out/main/index.js
+@@ -1499,7 +1499,10 @@
+     }
+     const currentPath = render?.setting?.launchOptions?.executablePath;
+     const legacyChromeRoot = path.join(process.resourcesPath, "bin", "chrome");
+-    if (typeof currentPath === "string" && currentPath.startsWith(legacyChromeRoot) && fs.existsSync(chromeFinalPath)) {
++    const oldAurChrome = "/opt/ocs-desktop/resources/bin/chrome/chrome/chrome";
++    if (typeof currentPath === "string"
++        && (currentPath === oldAurChrome || currentPath.startsWith(legacyChromeRoot + path.sep))
++        && fs.existsSync(chromeFinalPath)) {
+       render.setting.launchOptions.executablePath = chromeFinalPath;
+       StoreData.set("render", render);
+       logger$6.log("migrate builtin browser path", { from: currentPath, to: chromeFinalPath });
+@@ -2903,15 +2906,10 @@
+   });
+ }
+ electron.app.setAppUserModelId(electron.app.isPackaged ? "ocs.enncy.cn" : "OCS Desktop");
+-if (process.platform !== "linux" || isLinuxSandboxUnavailable()) {
+-  electron.app.commandLine.appendSwitch("no-sandbox");
+-  electron.app.commandLine.appendSwitch("--no-sandbox");
+-}
+ electron.app.commandLine.appendSwitch("disable-gpu");
+ electron.app.commandLine.appendSwitch("disable-software-rasterizer");
+ electron.app.commandLine.appendSwitch("disable-gpu-compositing");
+ electron.app.commandLine.appendSwitch("disable-gpu-rasterization");
+-electron.app.commandLine.appendSwitch("disable-gpu-sandbox");
+ electron.app.disableHardwareAcceleration();
+ if (process.platform === "linux") {
+   electron.app.commandLine.appendSwitch("enable-transparent-visuals");
+--- a/out/main/script.js
++++ b/out/main/script.js
+@@ -855,19 +855,16 @@
+         executablePath,
+         ignoreHTTPSErrors: true,
+         acceptDownloads: true,
++        // Preserve the Linux user namespace sandbox in the Playwright launch.
++        chromiumSandbox: true,
+         ignoreDefaultArgs: ["--disable-extensions", "--enable-automation"],
+         args: [
+           "--window-position=0,0",
+           "--no-first-run",
+           "--no-default-browser-check",
+           "--allow-file-access-from-files",
+-          // Linux：ignoreDefaultArgs 移除了 Playwright 默认的 --no-sandbox（沙箱启用），
+-          // 而解压分发的 chrome-sandbox 无法满足 setuid root 要求，
+-          // 且 Ubuntu 23.10+ AppArmor 限制非受限程序创建 user namespace（兜底方案同样被封堵），
+-          // 显式禁用沙箱避免内置浏览器无法启动（与主进程 --no-sandbox 行为一致）；
+-          // --disable-setuid-sandbox 一并关闭 setuid 沙箱助手（2.x AppImage 修复移植）
+           ...process.platform === "linux" ? [
+-            "--no-sandbox",
++            // The per-user Chrome install relies on user namespaces.
+             "--disable-setuid-sandbox",
+             // 显示平台按环境探测：纯 Wayland 会话无 DISPLAY，Chrome 默认走 X11
+             // 报 "Missing X server" → 强制 Wayland；有 DISPLAY 走 X11 正常路径

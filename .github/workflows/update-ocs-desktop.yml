@@ -1,0 +1,122 @@
+name: Check OCS Desktop releases
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+    inputs:
+      validate_current:
+        description: Build and verify the current release even when there is no update
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: update-ocs-desktop
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      patch: ${{ steps.validate.outputs.patch }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check the release and build in Arch Linux
+        id: validate
+        shell: bash
+        env:
+          VALIDATE_CURRENT: ${{ inputs.validate_current || false }}
+        run: |
+          result=$(mktemp -d "$RUNNER_TEMP/ocs-update.XXXXXX")
+          chmod 755 "$result"
+          if ! docker run --rm \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/checkout,readonly" \
+            --mount "type=bind,src=$result,dst=/result" \
+            --env VALIDATE_CURRENT archlinux:base-devel \
+            bash /checkout/.github/scripts/validate-update.sh; then
+            echo '::error::Release validation failed. Review the logs, archive layout and Linux patch before updating the package.'
+            exit 1
+          fi
+          if [[ ! -f "$result/version" ]]; then
+            echo 'No package update to propose.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          version=$(cat "$result/version")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          cp "$result/PKGBUILD" "$result/.SRCINFO" .
+          if git diff --quiet -- PKGBUILD; then
+            echo '::error::The validated update did not modify PKGBUILD.'
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'patch=%s\n' "$(git diff -- PKGBUILD .SRCINFO | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+  propose:
+    needs: validate
+    if: needs.validate.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Create an update pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          OCS_VERSION: ${{ needs.validate.outputs.version }}
+          OCS_PATCH: ${{ needs.validate.outputs.patch }}
+        run: |
+          [[ "$OCS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          branch="automation/ocs-desktop-$OCS_VERSION"
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base "$BASE_BRANCH" --state all --json url --jq '.[0].url // empty')
+          if [[ -n "$existing" ]]; then
+            echo "An update PR already exists: $existing"
+            exit 0
+          fi
+
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq .object.sha)
+          if [[ "$current" != "$GITHUB_SHA" ]]; then
+            echo '::error::The default branch advanced during validation. Re-run the update check.'
+            exit 1
+          fi
+          printf '%s' "$OCS_PATCH" | base64 --decode | git apply --index
+          [[ "$(git diff --cached --name-only)" == $'.SRCINFO\nPKGBUILD' ]]
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Update OCS Desktop to $OCS_VERSION"
+
+          # Reuse an identical branch left by an interrupted run. Never replace a branch.
+          existing_ref=$(git ls-remote origin "refs/heads/$branch")
+          if [[ -n "$existing_ref" ]]; then
+            git fetch --depth=1 origin "$branch"
+            if ! git diff --quiet HEAD FETCH_HEAD; then
+              echo '::error::The update branch exists with different content. Review it before retrying.'
+              exit 1
+            fi
+          else
+            git -c 'credential.helper=' -c 'credential.helper=!gh auth git-credential' \
+              push origin "HEAD:refs/heads/$branch"
+          fi
+
+          gh pr create --repo "$GITHUB_REPOSITORY" --base "$BASE_BRANCH" --head "$branch" \
+            --title "Update OCS Desktop to $OCS_VERSION" --body-file - <<BODY
+          Update to [OCS Desktop v$OCS_VERSION](https://github.com/ocsjs/ocs-desktop/releases/tag/v$OCS_VERSION).
+
+          The Arch container verified source digests and the Chrome lock and built the package with the Linux patch.
+          Review the packaging changes and run graphical and platform tests before merging.
+          BODY

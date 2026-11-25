@@ -1,0 +1,4 @@
+#!/bin/sh
+# Keep AppImage integration and self-updates inactive for the pacman installation.
+unset APPDIR APPIMAGE
+exec /usr/lib/ocs-desktop/ocs-desktop --disable-setuid-sandbox "$@"

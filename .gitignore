@@ -1,4 +1,21 @@
-*
-!.gitignore
-!PKGBUILD
-!.SRCINFO
+# makepkg work directories and downloads
+/src/
+/pkg/
+*.AppImage
+*.deb
+*.zip
+*.tar
+*.tar.*
+*.part
+*.log
+__pycache__/
+
+# Local configuration and credentials
+.env
+.env.*
+.agents/
+.aws/
+.codex/
+.ssh/
+*.pem
+*.key
