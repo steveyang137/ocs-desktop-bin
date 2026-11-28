@@ -1,7 +1,6 @@
 --- a/out/main/index.js
 +++ b/out/main/index.js
-@@ -1499,7 +1499,10 @@
-     }
+@@ -1500,5 +1500,8 @@
      const currentPath = render?.setting?.launchOptions?.executablePath;
      const legacyChromeRoot = path.join(process.resourcesPath, "bin", "chrome");
 -    if (typeof currentPath === "string" && currentPath.startsWith(legacyChromeRoot) && fs.existsSync(chromeFinalPath)) {
@@ -11,7 +10,6 @@
 +        && fs.existsSync(chromeFinalPath)) {
        render.setting.launchOptions.executablePath = chromeFinalPath;
        StoreData.set("render", render);
-       logger$6.log("migrate builtin browser path", { from: currentPath, to: chromeFinalPath });
 @@ -2903,15 +2906,10 @@
    });
  }
