@@ -1,7 +1,7 @@
 # Maintainer: syhanjin <syhanjin666@gmail.com>
 
 pkgname=ocs-desktop-bin
-pkgver=3.10.0
+pkgver=3.11.1
 pkgrel=1
 pkgdesc="Desktop manager for browser profiles, extensions and userscripts"
 arch=('x86_64')
@@ -36,7 +36,7 @@ source=(
 )
 noextract=("${_appimage}" "${_chrome_zip}")
 sha256sums=(
-  'c864c4db0459258dc305510f3532cc83441f830aa46ac88152dd2deb99184db1'
+  '2472646fb0b9fa59593259b939be285fadf059396f8851c406a17ea32315c0cb'
   'ffedd41a261f26e2e60e5d1692e0955c292caffafd15865344d21b845554a3d4'
   '44748fea2268164655da1e17ee5af53818fe466591d2955e8e36f2b1069f4f44'
   'bc96099d9dfe8ab23d97967e3d4980a63d6656df1dc3720f0e482e335a6de270'
